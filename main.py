@@ -75,7 +75,7 @@ async def play(background_tasks: BackgroundTasks):
 
 def play_game(game):
     print("Playing game "+str(game.game_id))
-    sleep(60)
+    results = game.run()
     print("Done playing game "+str(game.game_id))
     for player in game.players:
         player.set_playing(False)
