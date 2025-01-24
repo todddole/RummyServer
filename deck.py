@@ -7,12 +7,16 @@ Written for Hardin-Simmons CSCI-4332 Artificial Intelligence
 
 
 class Card:
-    def __init__(self, suit, value):
-        self.suit = suit
-        self.value = value
+    def __init__(self, suit, value=""):
+        if (value==""):
+            self.value = suit[0:1]
+            self.suit = suit[1:]
+        else:
+            self.suit = suit
+            self.value = value
 
     def __repr__(self):
-        return f"{self.value} of {self.suit}"
+        return f"{self.value}{self.suit}"
 
 class Deck:
     def __init__(self):
@@ -28,4 +32,8 @@ class Deck:
             return self.cards.pop()
         else:
             return None
+
+    def return_card(self, card):
+        if card not in self.cards:
+            self.cards.append(card)
 
