@@ -18,6 +18,13 @@ class Card:
     def __repr__(self):
         return f"{self.value}{self.suit}"
 
+    def get_score(self):
+        if self.value.isdigit():
+            return int(self.value)
+        if self.value == 'A': return 1
+        return 10
+
+
 class Deck:
     def __init__(self):
         suits = ["H", "D", "C", "S"]

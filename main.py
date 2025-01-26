@@ -124,7 +124,7 @@ async def play_test(background_tasks: BackgroundTasks):
         game_players = [store.get_test_player(), player]
         random.shuffle(game_players)
 
-        game = Game(game_players)
+        game = Game(game_players, test=True)
         for player in game_players:
             player.set_playing(True)
         background_tasks.add_task(play_game, game)
@@ -181,7 +181,9 @@ def game_launcher():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(filename='RummyServer.log', level=logging.INFO)
+    x = threading.Thread(target=game_launcher)
+    x.start()
     port = 16200  # Set your desired port number here
     uvicorn.run(app, host="127.0.0.1", port=port)
 

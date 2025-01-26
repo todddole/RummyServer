@@ -25,6 +25,7 @@ class Game:
         self.game_status = ""
         self.hand_status = ""
         self.test_game = test
+        self.meld_list = []
 
     def call_shutdown(self, player_num):
         url = "http://127.0.0.1:" + self.players[player_num].port + "/shutdown"
@@ -106,6 +107,7 @@ class Game:
             self.hands[player_number] = []
 
     def shuffle_discard(self):
+        logging.info("Shuffling discard pile")
         if (len(self.discard_pile)>5):
             save_cards = 3
         elif (len(self.discard_pile)>3):
@@ -138,6 +140,8 @@ class Game:
                     self.hands.append([])
                 self.deck = Deck()
                 self.deck.shuffle()
+                self.discard_pile = []
+                self.meld_list = []
 
                 # deal a hand to each player
                 for i in range(10):
@@ -176,9 +180,16 @@ class Game:
                 for i in range(len(self.players)):
                     self.events[i] += "Dealer discards " + str(card) + "\n"
 
-                while (player_turn  < len(self.players) and self.hand_status=="running"):  # Cycle through each player's turn once
+
+                while (self.hand_status=="running"):
+                    # Cycle through each player's turn
                     current_player = (player_turn + start_player) % len(self.players)
-                    if self.scores[current_player]>=1000: continue # player disqualified, skip
+                    player_turn+=1
+                    logging.info("\nStarting turn for " + self.players[current_player].name + ", turn "+str(player_turn))
+
+                    if self.scores[current_player]>=1000:
+                        logging.info("Skipping, player disqualified.\n")
+                        continue # player disqualified, skip
 
                     # call the draw api
                     payload = {
@@ -200,17 +211,18 @@ class Game:
                                 for i in range(len(self.players)):
                                     self.events[i]+= draw_string
                                 self.hands[current_player].append(card)
+                                logging.info(self.players[current_player].name + " drew from discard: "+str(card))
                         elif ("draw stock") in play_string:
                             card = self.deck.deal()
                             draw_string = self.players[current_player].name + " draws " + str(card) + "\n"
                             for i in range(len(self.players)):
                                 if i==current_player:
                                     self.events[i] += draw_string
-                                    logging.info("Game " + str(self.game_id) + ": " + draw_string)
                                 else:
                                     self.events[i] += self.players[current_player].name + " draws\n"
 
                             self.hands[current_player].append(card)
+                            logging.info(self.players[current_player].name + " drew from stock: "+str(card))
                             if (len(self.deck.cards)<=1):
                                 self.shuffle_discard()
                         else:
@@ -238,20 +250,77 @@ class Game:
                         while (len(ps_words)>0):
                             if ps_words[0]=="meld":
                                 logging.info("Player is melding, "+play_string)
+                                new_meld = []
+                                ps_words.pop(0)
+                                done = False
+                                while not done:
+                                    if len(ps_words)==0:
+                                        self.forfeit(current_player, "Invalid Meld String")
+                                        ps_words=[""]
+                                        break
+                                    card_txt = ps_words.pop(0)
+                                    for card in self.hands[current_player]:
+                                        if card_txt == str(card):
+                                            self.hands[current_player].remove(card)
+                                            new_meld.append(card)
+                                            card_txt = ""
+                                            break
+
+                                    if card_txt!="":
+                                        self.forfeit(current_player, "Tried to meld "+card_txt+ " but it's not in their hand.")
+                                        ps_words = [""]
+                                        break
+
+                                    if (len(ps_words)>0 and len(ps_words[0])>2) or (len(ps_words)==0):
+                                        # meld is done
+                                        if len(new_meld)<3:
+                                            self.forfeit(current_player, "Tried to meld " + str(new_meld))
+                                            ps_words = [""]
+                                            break
+
+                                        # let's make sure the meld is valid
+                                        is_valid = False
+                                        is_set = True
+                                        # TODO - Check that meld is valid
+
+                                        self.meld_list.append(new_meld)
+                                        event_txt = self.players[current_player].name + " plays meld("+str(len(self.meld_list)-1) + "): "
+                                        for card in new_meld:
+                                            event_txt += str(card) + " "
+                                        event_txt = event_txt[:-1] + "\n"
+                                        for i in range(len(self.players)):
+                                            self.events[i]+= event_txt
+
+
+
+
                             elif ps_words[0]=="layoff":
                                 logging.info("Player is laying off, " + play_string)
                             elif ps_words[0]=="discard":
-                                if ps_words[1] in self.hands[current_player]:
-                                    self.hands[current_player].remove(ps_words[1])
-                                    self.discard_pile.insert(0,Card(ps_words[1]))
+                                has_card = None
+                                for card in self.hands[current_player]:
+                                    if str(card)==ps_words[1]:
+                                        has_card = card
+                                        break
+
+                                if has_card is not None:
+                                    # TODO - Make sure they didn't discard what was just picked up from discard
+                                    self.hands[current_player].remove(card)
+                                    self.discard_pile.insert(0,card)
                                     for i in range(len(self.players)):
                                         self.events[i] += self.players[current_player].name + " discards " + ps_words[1] + "\n"
+                                        if i==current_player:
+                                            logging.info(self.players[current_player].name + " discards " + ps_words[1])
                                     # Take the first two elements off ps_words
                                     ps_words.pop(0)
                                     ps_words.pop(0)
                                 else:
                                     self.forfeit(current_player, "Player discarded invalid card")
-                                    continue
+                                    logging.error("Player discarded "+ps_words[1]+", hand is "+str(self.hands[current_player]))
+                                    break
+                            if len(ps_words)>=1 and ps_words[0]=="":   #Player already forfeited, break out of loop
+                                ps_words.pop(0)
+
                     elif "status" in result:
                         if result["status"] == "error":
                             self.forfeit(current_player, "API error")
@@ -260,9 +329,45 @@ class Game:
                             self.forfeit(current_player, "API timeout")
                             continue
 
-                # start over with first player
-                self.player_turn = 0
-                self.player_phase = 0
+                    if len(self.hands[current_player]) == 0 or (self.scores[current_player]<1000 and self.scores[current_player]>=500):
+                        self.hand_status = "done"
+                        for i in range(len(self.players)):
+                            for card in self.hands[i]:
+                                self.scores[i] += card.get_score()
+
+                    logging.info("Finished turn for "+self.players[current_player].name+", hand is: "+str(self.hands[current_player]))
+
+                # Hand is finished
+                logging.info("FInished player hand, winner = "+self.players[current_player].name)
+                logging.info("Scores = "+str(self.scores))
+
+                # Check if game is done
+                still_in = 0
+                for score in self.scores:
+                    if score>=500 and score < 1000: self.game_status = "finished" # game is over if a non-forfeit player is over 500
+                    elif score<500: still_in += 1
+
+                if still_in <=1: self.game_status = "finished"  # game is also over if only one (or less) player is still in (<500 points)
+
+                if self.game_status == "running": continue # game still going, skip the game wrap up code
+
+                # game is finished, record results
+                if self.scores[current_player] == min(self.scores):
+                    winner = current_player
+                else:
+                    win_score = min(self.scores)
+                    for i in range(len(self.players)):
+                        if self.scores[i]==win_score:
+                            winner=i
+
+                    for i in range(len(self.players)):
+                        if i==winner:
+                            self.players[i].add_record(win=True)
+                        else:
+                            self.players[i].add_record(win=False)
+
+
+
         logging.info("Finished with game run for "+str(self.game_id))
         if self.test_game:
             for i in range(len(self.players)):
