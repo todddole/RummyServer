@@ -122,6 +122,17 @@ class Game:
         for i in range(len(self.players)):
             self.events[i]+= "Shuffled discard, kept top "+str(save_cards)+"\n"
 
+    def is_set(self, cards):
+        """Returns True if a list of cards is a valid set, otherwise False"""
+        try:
+            value = cards[0].value
+            for card in cards:
+                if card.value != value:
+                    return False
+            return True
+        except Exception as e:
+            return False
+
     def run(self):
         results = ""
         self.game_status = "running"
@@ -325,6 +336,81 @@ class Game:
 
                             elif ps_words[0]=="layoff":
                                 logging.info("Player is laying off, " + play_string)
+                                # Let's make sure they have the card
+                                ps_words.pop(0)
+
+                                try:
+                                    meld_stack = ps_words.pop(0)[5:-1]
+                                    card_text = ps_words.pop(0)
+                                except IndexError:
+                                    meld_stack = ""
+                                    card_text = ""
+                                has_card = False
+                                for card in self.hands[current_player]:
+                                    if card_text == str(card):
+                                        has_card = True
+                                        break
+
+                                if has_card == False:
+                                    self.forfeit(current_player, "Tried to lay off " + "invalid card" if card_text=="" else card_text+", not in hand")
+                                    ps_words = [""]
+                                    continue
+
+                                # Check that meld_stack is valid
+                                try:
+                                    meld_stack = int(meld_stack)
+                                except ValueError:
+                                    self.forfeit(current_player,"Badly formed meld stack:  " + meld_stack)
+                                    ps_words = [""]
+                                    continue
+
+                                if meld_stack <0 or meld_stack > len(self.meld_list)-1:
+                                    self.forfeit(current_player, "Player tried to add to a non-existent meld pile:  " + meld_stack)
+                                    ps_words = [""]
+                                    continue
+
+                                # check that the card is a valid addition to the meld stack
+                                valid_meld = False
+                                if is_set(self.meld_list[meld_stack]):
+                                    # We are adding to a set, make sure it is valid and process it
+                                    if card.value == self.meld_list[meld_stack][0].value:
+                                        valid_meld = True
+                                        self.hands[current_player].remove(card)
+                                        self.meld_list[meld_stack].append(card)
+                                    else:
+                                        self.forfeit(current_player,"Player tried to layoff" + str(card) + "on meld(" +
+                                                     str(meld_stack)+ ") " + str(self.meld_list[meld_stack]))
+                                        ps_words = [""]
+                                        continue
+                                else:
+                                    # We are adding to a run, make sure it is valid and process it
+                                    # First, make sure it is the correct suit
+                                    if self.meld_list[meld_stack][0].suit != card.suit:
+                                        self.forfeit(current_player, "Player tried to layoff" + str(card) + "on meld(" +
+                                                     str(meld_stack) + ") " + str(self.meld_list[meld_stack]))
+                                        ps_words = [""]
+                                        continue
+
+                                    # Now make sure it is a valid value and add it if so
+                                    if self.meld_list[meld_stack][0].get_cv() - card.get_cv() == 1:
+                                        # We are inserting at the start of the run
+                                        self.hands[current_player].remove(card)
+                                        self.meld_list[meld_stack].insert(0,card)
+                                    elif card.get_cv() - self.meld_list[meld_stack][-1].get_cv() in [1,-12]:
+                                        # We are adding it at the end of the run
+                                        self.hands[current_player].remove(card)
+                                        self.meld_list[meld_stack].append(card)
+                                    else:
+                                        self.forfeit(current_player, "Player tried to layoff" + str(card) + "on meld(" +
+                                                     str(meld_stack) + ") " + str(self.meld_list[meld_stack]))
+                                        ps_words = [""]
+                                        continue
+
+                                # IF we made it this far, it was a valid layoff.  Report to the players
+                                for event in self.events:
+                                    event+=self.players[current_player].name + " laysoff meld("+str(meld_stack)+ "): "+str(card)+"\n"
+
+
                             elif ps_words[0]=="discard":
                                 has_card = None
                                 for card in self.hands[current_player]:

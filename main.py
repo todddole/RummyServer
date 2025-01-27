@@ -22,9 +22,10 @@ Revision History:
 0.8 added start of gameplay, discard handling
 0.9 added automatic game start thread, meld handling, game results
 0.95 finished meld handling, corrected error handling on failed api calls at start of game that resulted in hung game
+1.0 Added code to process player laying off
 """
 
-VERSION = "0.95"
+VERSION = "1.0"
 
 app = FastAPI()
 
