@@ -171,8 +171,14 @@ class Game:
                             if "status" in result:
                                 if result["status"] == "error":
                                     self.forfeit(j, "API error")
+                                    if self.players_left <= 1:
+                                        self.hand_status = "done"
+                                        current_player = 0
                                 elif result["status"] == "timeout":
                                     self.forfeit(j, "API timeout")
+                                    if self.players_left <= 1:
+                                        self.hand_status = "done"
+                                        current_player = 0
 
                 # put a card on discard
                 card = self.deck.deal()
@@ -212,6 +218,7 @@ class Game:
                                     self.events[i]+= draw_string
                                 self.hands[current_player].append(card)
                                 logging.info(self.players[current_player].name + " drew from discard: "+str(card))
+                                discard_draw = str(card)
                         elif ("draw stock") in play_string:
                             card = self.deck.deal()
                             draw_string = self.players[current_player].name + " draws " + str(card) + "\n"
@@ -223,6 +230,7 @@ class Game:
 
                             self.hands[current_player].append(card)
                             logging.info(self.players[current_player].name + " drew from stock: "+str(card))
+                            discard_draw = ""
                             if (len(self.deck.cards)<=1):
                                 self.shuffle_discard()
                         else:
@@ -273,26 +281,47 @@ class Game:
 
                                     if (len(ps_words)>0 and len(ps_words[0])>2) or (len(ps_words)==0):
                                         # meld is done
+                                        done = True
                                         if len(new_meld)<3:
                                             self.forfeit(current_player, "Tried to meld " + str(new_meld))
                                             ps_words = [""]
                                             break
 
-                                        # let's make sure the meld is valid
-                                        is_valid = False
-                                        is_set = True
-                                        # TODO - Check that meld is valid
+                                if len(ps_words)>0 and ps_words[0]=="": break
 
-                                        self.meld_list.append(new_meld)
-                                        event_txt = self.players[current_player].name + " plays meld("+str(len(self.meld_list)-1) + "): "
-                                        for card in new_meld:
-                                            event_txt += str(card) + " "
-                                        event_txt = event_txt[:-1] + "\n"
-                                        for i in range(len(self.players)):
-                                            self.events[i]+= event_txt
+                                # Meld is complete, let's make sure the meld is valid
+                                new_meld.sort()
+                                if new_meld[0].value=="A" and new_meld[-1].value=="K":
+                                    # We have a run that includes a king and an ace.  Move the ace to after king.
+                                    new_meld.append(new_meld.pop(0))
 
+                                is_set = True
+                                is_run = True
 
+                                set_val = str(new_meld[0])[0]
+                                run_suit = str(new_meld[0])[1]
+                                last_cv = 0
+                                for card in new_meld:
+                                    if (last_cv!=0):
+                                        if (card.get_cv() - last_cv) - 1 not in [0, -13]:  # Check if it is one higher than previous card.  King to Ace will give -13
+                                            is_run = False #
+                                    card_text = str(card)
+                                    if card_text[0]!=set_val: is_set = False
+                                    if card_text[1]!=run_suit: is_run = False
 
+                                if (not is_set and not is_run) or (is_set and is_run):
+                                    self.forfeit(current_player, "Invalid meld: " + str(new_meld))
+                                    ps_words = [""]
+                                    break
+
+                                # meld is valid, let's finish processing it
+                                self.meld_list.append(new_meld)
+                                event_txt = self.players[current_player].name + " plays meld("+str(len(self.meld_list)-1) + "): "
+                                for card in new_meld:
+                                    event_txt += str(card) + " "
+                                event_txt = event_txt[:-1] + "\n"
+                                for i in range(len(self.players)):
+                                    self.events[i]+= event_txt
 
                             elif ps_words[0]=="layoff":
                                 logging.info("Player is laying off, " + play_string)
@@ -304,7 +333,12 @@ class Game:
                                         break
 
                                 if has_card is not None:
-                                    # TODO - Make sure they didn't discard what was just picked up from discard
+                                    # Make sure they didn't discard what was just picked up from discard
+                                    if discard_draw is not None and discard_draw==ps_words[1]:
+                                        self.forfeit(current_player, "Player discarded "+ps_words[1]+", which they just picked up from discard pile.")
+                                        logging.error("Player discarded the card they just picked up from discard: " + ps_words[1] + ", hand is " + str(
+                                            self.hands[current_player]))
+                                        break
                                     self.hands[current_player].remove(card)
                                     self.discard_pile.insert(0,card)
                                     for i in range(len(self.players)):
@@ -338,7 +372,7 @@ class Game:
                     logging.info("Finished turn for "+self.players[current_player].name+", hand is: "+str(self.hands[current_player]))
 
                 # Hand is finished
-                logging.info("FInished player hand, winner = "+self.players[current_player].name)
+                logging.info("Finished player hand, winner = "+self.players[current_player].name)
                 logging.info("Scores = "+str(self.scores))
 
                 # Check if game is done

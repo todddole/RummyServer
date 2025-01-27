@@ -15,9 +15,16 @@ import requests
 from player import Player
 
 """
-By Todd Dole, Revision 1.0
+By Todd Dole, Revision 0.9
 Written for Hardin-Simmons CSCI-4332 Artificial Intelligence
+Revision History:
+0.7 Basic Implementation of API structure
+0.8 added start of gameplay, discard handling
+0.9 added automatic game start thread, meld handling, game results
+0.95 finished meld handling, corrected error handling on failed api calls at start of game that resulted in hung game
 """
+
+VERSION = "0.95"
 
 app = FastAPI()
 
@@ -181,7 +188,9 @@ def game_launcher():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename='RummyServer.log', level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S', filename='RummyServer.log', level=logging.INFO)
+    logging.info("Starting server, version "+VERSION)
     x = threading.Thread(target=game_launcher)
     x.start()
     port = 16200  # Set your desired port number here

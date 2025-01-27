@@ -14,6 +14,22 @@ class Card:
         else:
             self.suit = suit
             self.value = value
+        self.cv = 0
+        if self.suit=="D": self.cv+=13
+        elif self.suit=="H": self.cv+=26
+        elif self.suit=="S": self.cv+=39
+        if self.value== "A": self.cv+=1
+        elif self.value=="T": self.cv+=10
+        elif self.value=="J": self.cv+=11
+        elif self.value=="Q": self.cv+=12
+        elif self.value=="K": self.cv+=13
+        else: self.cv+=int(self.value)
+
+    def __lt__(self, other):
+        return self.cv < other.cv
+
+    def __gt__(self, other):
+        return self.cv > other.cv
 
     def __repr__(self):
         return f"{self.value}{self.suit}"
@@ -24,6 +40,8 @@ class Card:
         if self.value == 'A': return 1
         return 10
 
+    def get_cv(self):
+        return self.cv
 
 class Deck:
     def __init__(self):
@@ -43,4 +61,3 @@ class Deck:
     def return_card(self, card):
         if card not in self.cards:
             self.cards.append(card)
-
