@@ -15,7 +15,7 @@ import requests
 from player import Player
 
 """
-By Todd Dole, Revision 0.9
+By Todd Dole, Revision 1.1
 Written for Hardin-Simmons CSCI-4332 Artificial Intelligence
 Revision History:
 0.7 Basic Implementation of API structure
@@ -23,9 +23,10 @@ Revision History:
 0.9 added automatic game start thread, meld handling, game results
 0.95 finished meld handling, corrected error handling on failed api calls at start of game that resulted in hung game
 1.0 Added code to process player laying off
+1.1 Bug fixes, added better game results logging, added notifying players on hand end or game end
 """
 
-VERSION = "1.0"
+VERSION = "1.1"
 
 app = FastAPI()
 
@@ -41,6 +42,10 @@ class ThreadSafeDataStore:
 
     def add_player(self, player):
         with self._lock:
+            for op in self.players:
+                if op.port == player.port:
+                    # Duplicate player, need to do something about it.
+                    self.players.remove(op)
             self.players.append(player)
 
     def get_players(self):

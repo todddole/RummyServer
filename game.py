@@ -2,9 +2,10 @@ from deck import Card, Deck
 import requests
 import logging
 import time
+import datetime
 
 """
-By Todd Dole, Revision 1.0
+By Todd Dole, Revision 1.1
 Written for Hardin-Simmons CSCI-4332 Artificial Intelligence
 """
 
@@ -26,6 +27,7 @@ class Game:
         self.hand_status = ""
         self.test_game = test
         self.meld_list = []
+        self.api_calls = 0
 
     def call_shutdown(self, player_num):
         url = "http://127.0.0.1:" + self.players[player_num].port + "/shutdown"
@@ -40,6 +42,7 @@ class Game:
 
 
     def call_api(self, endpoint, player_num, payload):
+        self.api_calls += 1
         url = "http://127.0.0.1:" + self.players[player_num].port + "/" + endpoint
         try:
             response = requests.post(url, json=payload, timeout=200)
@@ -134,13 +137,18 @@ class Game:
             return False
 
     def run(self):
+        start_time = time.time()
         results = ""
         self.game_status = "running"
         self.scores = [0] * len(self.players)
         start_player = 0
+        self.hand_number = 0
 
         while (self.game_status == "running"):
             self.hand_status = "running"
+            self.hand_number += 1
+            logging.info("*** Starting Hand Number "+str(self.hand_number))
+
             while (self.hand_status == "running"):
                 start_player += 1
                 start_player %= len(self.players)
@@ -177,7 +185,7 @@ class Game:
                             else:
                                 payload = {"hand": hand_str}
 
-                            result = self.call_api("start-" + str(len(self.players)) + "p-" + ("game" if sum(self.scores)==0 else "hand"), j, payload)
+                            result = self.call_api("start-" + str(len(self.players)) + "p-" + ("game/" if sum(self.scores)==0 else "hand/"), j, payload)
                             # If the result is invalid, forfeit
                             if "status" in result:
                                 if result["status"] == "error":
@@ -202,7 +210,7 @@ class Game:
                     # Cycle through each player's turn
                     current_player = (player_turn + start_player) % len(self.players)
                     player_turn+=1
-                    logging.info("\nStarting turn for " + self.players[current_player].name + ", turn "+str(player_turn))
+                    logging.info("*** Starting turn for " + self.players[current_player].name + ", turn "+str(player_turn))
 
                     if self.scores[current_player]>=1000:
                         logging.info("Skipping, player disqualified.\n")
@@ -407,8 +415,8 @@ class Game:
                                         continue
 
                                 # IF we made it this far, it was a valid layoff.  Report to the players
-                                for event in self.events:
-                                    event+=self.players[current_player].name + " laysoff meld("+str(meld_stack)+ "): "+str(card)+"\n"
+                                for i in range(len(self.players)):
+                                    self.events[i]+=self.players[current_player].name + " laysoff meld("+str(meld_stack)+ "): "+str(card)+"\n"
 
 
                             elif ps_words[0]=="discard":
@@ -449,17 +457,20 @@ class Game:
                             self.forfeit(current_player, "API timeout")
                             continue
 
-                    if len(self.hands[current_player]) == 0 or (self.scores[current_player]<1000 and self.scores[current_player]>=500):
+                    if len(self.hands[current_player]) == 0 or (self.scores[current_player]<1000 and self.scores[current_player]>=500) or player_turn>999:
                         self.hand_status = "done"
                         for i in range(len(self.players)):
                             for card in self.hands[i]:
                                 self.scores[i] += card.get_score()
 
-                    logging.info("Finished turn for "+self.players[current_player].name+", hand is: "+str(self.hands[current_player]))
+                    logging.info("Finished turn for "+self.players[current_player].name+", hand is: "+str(sorted(self.hands[current_player])))
 
                 # Hand is finished
                 logging.info("Finished player hand, winner = "+self.players[current_player].name)
                 logging.info("Scores = "+str(self.scores))
+                for i in range(len(self.players)):
+                    self.events[i] += "Hand Ends: " + self.players[0].name + " " + str(self.scores[0]) + \
+                             " " + self.players[1].name + " " + str(self.scores[1]) + "\n"
 
                 # Check if game is done
                 still_in = 0
@@ -469,7 +480,9 @@ class Game:
 
                 if still_in <=1: self.game_status = "finished"  # game is also over if only one (or less) player is still in (<500 points)
 
-                if self.game_status == "running": continue # game still going, skip the game wrap up code
+                if self.game_status == "running":
+                    self.update_players()
+                    continue # game still going, skip the game wrap up code
 
                 # game is finished, record results
                 if self.scores[current_player] == min(self.scores):
@@ -485,6 +498,25 @@ class Game:
                             self.players[i].add_record(win=True)
                         else:
                             self.players[i].add_record(win=False)
+
+                for i in range(len(self.players)):
+                    self.events[i] += "Game Ends: " + self.players[0].name + " " + str(self.scores[0])
+                    self.events[i] += " * " if winner==0 else " "
+                    self.events[i] += self.players[1].name + " " + str(self.scores[1])
+                    self.events[i] += " *\n" if winner == 1 else "\n"
+
+                self.update_players()
+
+                with open("RummyResults.csv", "a") as file:
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    try:
+                        file.write(current_time + "," + str(self.test_game) + ",2," +
+                            self.players[0].name+","+self.players[1].name + ",," +
+                            "," + str(self.scores[0]) + "," + str(self.scores[1]) + ",,," + str(winner) +
+                            "," + str(self.hand_number) + "," + str(self.api_calls) + "," +
+                                   str(int(time.time() - start_time)) + "\n")
+                    except IOError:
+                        logging.error("Error writing to file with game results.")
 
 
 
