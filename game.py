@@ -54,7 +54,7 @@ class Game:
             return {"status":"error"}
 
         if response.status_code == 200:
-            logging.info("Game " + str(self.game_id) + " API Call Successful: "+url)
+            logging.info("Game " + str(self.game_id) + " API Call Successful: "+url+", response = "+response.text)
             return response.json()
         else:
             logging.error("Game " + str(self.game_id) + " API Call Failed, status code "+str(response.status_code) + ", URL: "+url)
@@ -445,7 +445,15 @@ class Game:
                                 else:
                                     self.forfeit(current_player, "Player discarded invalid card")
                                     logging.error("Player discarded "+ps_words[1]+", hand is "+str(self.hands[current_player]))
-                                    break
+                                    # bug fix 2/7 to break out of endless loop
+                                    ps_words = [""]
+                                    continue
+                            else:
+                                self.forfeit(current_player, "Player responded with malformed play text")
+                                logging.error("Player responded with: " + str(ps_words))
+                                # bug fix 2/7 to break out of endless loop
+                                ps_words = [""]
+                                continue
                             if len(ps_words)>=1 and ps_words[0]=="":   #Player already forfeited, break out of loop
                                 ps_words.pop(0)
 
